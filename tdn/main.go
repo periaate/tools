@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"github.com/periaate/blume/fsio"
-	. "github.com/periaate/blume/gen"
-	. "github.com/periaate/blume/str"
+	"github.com/periaate/blume/gen"
+	"github.com/periaate/blume/str"
 )
 
 func main() { fmt.Println(ParseTD(strings.Join(fsio.Args(), " ")).Unix()) }
 
 func ParseTD(exp string) (res time.Time) {
-	sar := SplitWithAll(exp, false, " ")
-	abs := Any(Contains("abs", "absolute"))(sar)
+	sar := str.SplitWithAll(exp, false, " ")
+	abs := gen.Any(str.Contains("abs", "absolute"))(sar)
 
 	switch {
 	case abs:
@@ -25,7 +25,7 @@ func ParseTD(exp string) (res time.Time) {
 	for _, v := range sar {
 		// fuck you @daniel
 		switch {
-		case Contains(":")(v):
+		case str.Contains(":")(v):
 			t, err := time.Parse(time.TimeOnly, exp)
 			if err != nil {
 				continue
@@ -67,28 +67,28 @@ func Parse(exp string) (t time.Duration, err error) {
 	}
 
 	var neg time.Duration = 1
-	if HasPrefix("-")(exp) {
+	if str.HasPrefix("-")(exp) {
 		neg = -1
-		exp = Shift(1)(exp)
+		exp = str.Shift(1)(exp)
 	}
 
 	mul := s
 	switch {
-	case HasSuffix("s")(exp):
+	case str.HasSuffix("s")(exp):
 		mul = s
-	case HasSuffix("m")(exp):
+	case str.HasSuffix("m")(exp):
 		mul = m
-	case HasSuffix("h")(exp):
+	case str.HasSuffix("h")(exp):
 		mul = h
-	case HasSuffix("d")(exp):
+	case str.HasSuffix("d")(exp):
 		mul = d
-	case HasSuffix("M")(exp):
+	case str.HasSuffix("M")(exp):
 		mul = M
-	case HasSuffix("y")(exp):
+	case str.HasSuffix("y")(exp):
 		mul = y
 	}
 
-	exp = Pop(1)(exp)
+	exp = str.Pop(1)(exp)
 
 	n, err := strconv.ParseInt(exp, 10, 64)
 	t = mul * time.Duration(n) * neg
