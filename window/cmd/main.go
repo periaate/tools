@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"tools/window"
+	"github.com/periaate/tools/window"
 
 	"github.com/periaate/blume/clog"
 	"github.com/periaate/blume/fsio"

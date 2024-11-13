@@ -1,4 +1,4 @@
-module tools
+module github.com/periaate/tools
 
 go 1.23.0
 
