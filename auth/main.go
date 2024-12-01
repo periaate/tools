@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/periaate/blume/clog"
 	"github.com/periaate/blume/fsio"
+	"github.com/periaate/blume/gen"
+	"github.com/periaate/blume/x/hnet"
 	"github.com/periaate/blume/x/hnet/auth"
 )
-
-var tar = ""
 
 func main() {
 	args := fsio.Args()
@@ -20,8 +21,18 @@ func main() {
 		clog.Fatal("not enough args")
 	}
 
-	tar = args[0]
-	uri, err := url.Parse(tar)
+	tar, ok := gen.GetShift(0, args)
+	if !ok {
+		clog.Fatal("not enough args", "reason", "no proxy target address")
+	}
+	out, ok := gen.GetShift(1, args)
+	if !ok {
+		clog.Fatal("not enough args", "reason", "no proxy host address")
+	}
+	link, _ := gen.GetShift(2, args)
+	link = hnet.URL(link, hnet.Opt_HTTPS)
+
+	uri, err := url.Parse(hnet.URL(tar))
 	if err != nil {
 		clog.Fatal("couldn't parse url", "err", err)
 	}
@@ -30,8 +41,34 @@ func main() {
 	clog.Info("starting proxy", "target", tar)
 	proxy := httputil.NewSingleHostReverseProxy(uri)
 	go func() {
-		http.HandleFunc("GET /gen/", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "%s", man.NewLink(20, 30*time.Minute))
+		http.HandleFunc("GET /gen/{time}/{uses}", func(w http.ResponseWriter, r *http.Request) {
+			times := r.PathValue("time")
+			uses := r.PathValue("uses")
+
+			if len(times) == 0 || len(uses) == 0 {
+				return
+			}
+
+			itime, err := strconv.Atoi(times)
+			if err != nil {
+				return
+			}
+
+			iuses, err := strconv.Atoi(uses)
+			if err != nil {
+				return
+			}
+
+			if iuses == 0 {
+				return
+			}
+
+			if len(out) == 0 {
+				fmt.Fprintf(w, "%s", man.NewLink(iuses, time.Duration(itime)*time.Minute))
+				return
+			}
+			res := fsio.Join(link, man.NewLink(iuses, time.Duration(itime)*time.Minute))
+			fmt.Fprintf(w, "%s", res)
 		})
 		clog.Info("starting inward server", "addr", "http://localhost:8099")
 		http.ListenAndServe("localhost:8099", nil)
@@ -59,8 +96,8 @@ func main() {
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
-	clog.Info("starting outwards server", "addr", "http://"+args[1])
-	http.ListenAndServe(args[1], http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	clog.Info("starting outwards server", "addr", "http://"+out)
+	http.ListenAndServe(out, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// get cookie key
 		sessKey, err := r.Cookie("X-Session")
 		if err != nil {
