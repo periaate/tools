@@ -11,69 +11,24 @@ import (
 	"github.com/periaate/blume/yap"
 )
 
-func AtLeast(n int) Condition[int] {
-	return func(i int) (er Error[string]) {
-		if i < n {
-			er = Errs("at least "+string(n), "input is less than "+string(n), "")
-		}
-		return nil
-	}
-}
-
-func AtMost(n int) Condition[int] {
-	return func(i int) (er Error[string]) {
-		if i > n {
-			er = Errs("at most "+string(n), "input is more than "+string(n), "")
-		}
-		return nil
-	}
-}
-
-func Between(min, max int) Condition[int] {
-	return func(i int) (er Error[string]) {
-		if i < min {
-			er = Errs("between "+string(min)+" and "+string(max), "input is less than "+string(min), "")
-		} else if i > max {
-			er = Errs("between "+string(min)+" and "+string(max), "input is more than "+string(max), "")
-		}
-		return nil
-	}
-}
-
-func Exactly(n int) Condition[int] {
-	return func(i int) (er Error[string]) {
-		if i != n {
-			er = Errs("exactly "+string(n), "input is not "+string(n), "")
-		}
-		return nil
-	}
-}
-
-func Len[A any](cond Condition[int]) Condition[[]A] {
-	return func(ar []A) Error[string] {
-		return cond(len(ar))
-	}
-}
-
 func main() {
+	yap.IncludeTimes(false, false, false, false, false, false)
+
 	if gen.Any(gen.Contains("LICENSE", "License", "license"))(gen.Must(fsio.ReadDir("./"))) {
 		yap.Fatal("license file already exists")
 	}
 
 	fsio.QArgs(Len[string](Exactly(1))).Match(
 		func(s []String) {
-			yap.Info("licenser called with", s[0])
+			fmt.Printf("running licenser with argument %s\n", s[0])
 			if lic, ok := licenses[s[0].String()]; ok {
 				err := fsio.WriteNew("LICENSE", fsio.B(lic))
 				if err != nil {
 					yap.Fatal("error writing license", "err", err)
 				}
-				yap.Info("license written", "license", s[0])
+				fmt.Printf("License %s written to LICENSE\n", s[0])
 			} else {
-				yap.Error("license not found", "tried to find", s[0])
-				fmt.Println("")
-				fmt.Println("Available licenses:")
-				fmt.Println(licensesStr)
+				fmt.Printf("License %s not found\n\nAvailable licenses:\n%s", s[0], licensesStr)
 			}
 		},
 		func(e Error[any]) {
