@@ -3,21 +3,17 @@ package main
 import (
 	"os/exec"
 
-	"github.com/periaate/blume/clog"
 	"github.com/periaate/blume/fsio"
+	"github.com/periaate/blume/gen"
+	"github.com/periaate/blume/gen/T"
+	"github.com/periaate/blume/yap"
 )
 
 func main() {
-	args := fsio.Args()
-	if len(args) == 0 {
-		clog.Fatal("no arguments given")
-	}
-
-	cmd := args[0]
-	_, err := exec.LookPath(cmd)
-	if err != nil {
-		clog.Fatal("command not found", "cmd", cmd)
-	}
-
-	clog.Info("command found", "cmd", cmd)
+	fsio.Args(T.Len[string](T.NotZero[int])).Match(
+		func(s []string) {
+			yap.Info("command ["+s[0]+"] found at:", gen.Must(exec.LookPath(s[0])))
+		},
+		func(e T.Error[any]) { yap.Fatal("no arguments given") },
+	)
 }

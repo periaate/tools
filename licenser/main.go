@@ -14,7 +14,7 @@ import (
 func main() {
 	yap.IncludeTimes(false, false, false, false, false, false)
 
-	if gen.Any(gen.Contains("LICENSE", "License", "license"))(gen.Must(fsio.ReadDir("./"))) {
+	if gen.Any(gen.Is("LICENSE", "License", "license"))(gen.Must(fsio.ReadDir("./"))) {
 		yap.Fatal("license file already exists")
 	}
 
