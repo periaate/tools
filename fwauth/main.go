@@ -3,33 +3,33 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/periaate/blob"
 	"github.com/periaate/blume/clog"
 	"github.com/periaate/blume/fsio"
+	"github.com/periaate/blume/hnet"
+	"github.com/periaate/blume/hnet/auth"
 	"github.com/periaate/blume/maps"
-	"github.com/periaate/blume/options"
+	"github.com/periaate/blume/str"
 	"github.com/periaate/blume/util"
-	"github.com/periaate/blume/x/hnet"
-	"github.com/periaate/blume/x/hnet/auth"
 )
 
 // TODO: validate link and session hosts
 
 func main() {
+	args, _ := fsio.Args()
+	serveAt := args[0]
+
 	man := auth.NewManager(func(a *auth.Manager) {
 		a.Sessions.Hooks.Set = func(s string, ei maps.ExpItem[auth.Session]) (st string, exi maps.ExpItem[auth.Session], op maps.Operation) {
-			clog.Info("setting session", "session", ei.Value)
 			b := blob.Blob(fsio.Join(ei.Value.Host, ei.Value.Cookie))
-			clog.Info("setting session", "session", ei.Value)
 			nerr := b.Set(ei.Value.Reader(), blob.JSON)
-			clog.Info("setting session", "session", ei.Value)
 			if nerr != nil {
 				clog.Error("error setting session", "err", nerr)
 				return s, ei, maps.OP_NIL
 			}
-			clog.Info("session set", "session", ei.Value)
 			return s, ei, maps.OP_NIL
 		}
 	})
@@ -62,9 +62,9 @@ func main() {
 	go func() {
 		http.HandleFunc("GET /gen/{host}/{label}/{duration}/{uses}", func(w http.ResponseWriter, r *http.Request) {
 			p := hnet.PathValue(r)
-			duration := p.Duration("duration", options.AtLeast(time.Minute))
-			uses := p.Int("uses", options.AtLeast(1))
-			host := p.String("host", options.NotZero[string]())
+			duration := p.Duration("duration", util.AtLeast(time.Minute))
+			uses := p.Int("uses", util.AtLeast(1))
+			host := p.String("host", util.NotZero[string]())
 			label := p.String("label")
 
 			if len(p.Nerrors) > 0 {
@@ -78,11 +78,11 @@ func main() {
 			t := duration * time.Minute
 			link, _ := man.NewLink(uses, label, host, t)
 
-			res := fsio.Join(hnet.URL(host), link)
+			res := fsio.Join(string(hnet.URL(host).Format()), string(link))
 			fmt.Fprintf(w, "%s", res)
 		})
-		clog.Info("starting inward server", "addr", "http://localhost:10008")
-		http.ListenAndServe("localhost:10008", nil)
+		clog.Info("starting inward server", "addr", hnet.URL(serveAt))
+		http.ListenAndServe(serveAt, nil)
 	}()
 
 	mux := http.NewServeMux()
@@ -93,12 +93,15 @@ func main() {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		v, ok := man.Sessions.Get(sessKey.Value)
+		_, ok := man.Sessions.Get(sessKey.Value)
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		clog.Info("session recognized", "label", v.Label)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -106,35 +109,49 @@ func main() {
 		bucket := r.PathValue("host")
 		hash := r.PathValue("hash")
 
+		b := str.SplitWithAll(bucket, false, ".")
+		if len(b) >= 3 {
+			bucket = b[len(b)-2] + "." + b[len(b)-1]
+		}
+		clog.Debug("bucket", "bucket", bucket)
+		if len(bucket) == 0 {
+			clog.Error("invalid hash", "hash", hash)
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+
 		sessKey, _ := r.Cookie("X-Session")
 		if sessKey != nil {
 			v, ok := man.Sessions.Get(sessKey.Value)
-			clog.Info("attempting cookie", "cookie", sessKey.Value)
+			clog.Debug("attempting cookie", "cookie", sessKey.Value)
 			if ok {
-				clog.Info("session recognized", "label", v.Label)
+				clog.Debug("session recognized", "label", v.Label)
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 		}
 
-		clog.Info("authenticating", "hash", hash, "host", bucket)
+		clog.Debug("authenticating", "hash", hash, "host", bucket)
 		if len(hash) != 44 {
-			clog.Error("invalid hash", "hash", hash)
+			clog.Error("invalid hash", "hash", hash, "remote", r.RemoteAddr)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		clog.Info("using link")
+		clog.Debug("using link")
 		_, ok := man.UseLink(hash, w)
 		if !ok {
 			clog.Error("error using link")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		clog.Info("link used")
+		clog.Debug("link used")
 
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
-	http.ListenAndServe("localhost:10010", hnet.Log(mux))
+	fmt.Println(os.Getenv("FW_AUTH_ADDR"))
+	addr := ":10010"
+	clog.Info("starting fwauth server", "addr", hnet.URL(addr).Format())
+	http.ListenAndServe(":10010", hnet.CORS{}.Handler(mux))
+	// http.ListenAndServe(os.Getenv("FW_AUTH_ADDR"), hnet.CORS{}.Handler(mux))
 }
